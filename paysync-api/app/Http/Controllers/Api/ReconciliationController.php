@@ -5,25 +5,22 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Reconciliation;
 use App\Services\MatchingService;
-use Illuminate\Http\JsonResponse;
 
 class ReconciliationController extends Controller
 {
-    public function run(MatchingService $matcher): JsonResponse
+    public function run(MatchingService $matcher)
     {
+        $outcome = $matcher->reconcile();
+
         return response()->json([
-            'message' => 'Reconciliation completed',
-            'results' => $matcher->reconcile(),
+            'message'            => 'Reconciliation completed',
+            'results'            => $outcome['results'],
+            'unmatched_payments' => $outcome['unmatched_payments'],
         ]);
     }
 
-    public function index(): JsonResponse
+    public function index()
     {
-        return response()->json([
-            'data' => Reconciliation::with([
-                'invoice',
-                'transaction',
-            ])->latest()->get(),
-        ]);
+        return Reconciliation::with(['invoice', 'transaction'])->orderBy('id')->get();
     }
 }
