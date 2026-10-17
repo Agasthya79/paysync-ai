@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ReconciliationController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\TransactionController;
+use App\Http\Controllers\Api\TransactionImportController;
 
 Route::get('/health', function () {
     return response()->json([
@@ -29,3 +30,4 @@ Route::get('/reconciliation', [
 
 Route::apiResource('invoices', InvoiceController::class)->except(['destroy']);
 Route::apiResource('transactions', TransactionController::class)->except(['destroy']);
+Route::post('transactions/import', TransactionImportController::class);

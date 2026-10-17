@@ -1,0 +1,8 @@
+external_id,reference_id,amount,currency,status,paid_at
+TXN-5001,REF-5001,1200.00,USD,completed,2026-10-10
+TXN-5002,REF-5002,"1,500.50",usd,completed,2026-10-11
+TXN-5003,,300.00,EUR,completed,2026-10-12
+TXN-5004,REF-5004,abc,USD,completed,2026-10-12
+TXN-5001,REF-5001,1200.00,USD,completed,2026-10-10
+TXN-5005,REF-5005,99.99,XYZ,completed,2026-10-13
+TXN-5006,REF-5006,450.00,GBP,pending,not-a-date
