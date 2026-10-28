@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\Reconciliation;
 use App\Models\Transaction;
 use Illuminate\Support\Facades\DB;
+use App\Models\ReconciliationRun;
 
 class MatchingService
 {
@@ -81,22 +82,35 @@ class MatchingService
             }
 
             // 5. Save the current result per invoice (history comes on Day 5).
-            foreach ($results as $r) {
-                Reconciliation::updateOrCreate(
-                    ['invoice_id' => $r['invoice_id']],
-                    [
-                        'transaction_id' => $r['transaction_id'],
-                        'status'         => $r['status'],
-                        'confidence'     => $r['confidence'],
-                        'explanation'    => $r['explanation'],
-                    ]
-                );
-            }
-
-            usort($results, fn ($a, $b) => $a['invoice_id'] <=> $b['invoice_id']);
+                        usort($results, fn ($a, $b) => $a['invoice_id'] <=> $b['invoice_id']);
             usort($unmatched, fn ($a, $b) => $a['transaction_id'] <=> $b['transaction_id']);
 
+            // 5. Record this run. Old runs are kept, never overwritten.
+            $matchedCount = count(array_filter(
+                $results,
+                fn ($r) => in_array($r['status'], ['matched', 'split_matched'], true)
+            ));
+
+            $run = ReconciliationRun::create([
+                'invoices_checked'   => count($results),
+                'matched'            => $matchedCount,
+                'needs_review'       => count($results) - $matchedCount,
+                'unmatched_payments' => $unmatched,
+            ]);
+
+            foreach ($results as $r) {
+                Reconciliation::create([
+                    'run_id'         => $run->id,
+                    'invoice_id'     => $r['invoice_id'],
+                    'transaction_id' => $r['transaction_id'],
+                    'status'         => $r['status'],
+                    'confidence'     => $r['confidence'],
+                    'explanation'    => $r['explanation'],
+                ]);
+            }
+
             return [
+                'run_id'             => $run->id,
                 'results'            => $results,
                 'unmatched_payments' => $unmatched,
             ];

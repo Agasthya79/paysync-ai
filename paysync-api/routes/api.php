@@ -31,3 +31,6 @@ Route::get('/reconciliation', [
 Route::apiResource('invoices', InvoiceController::class)->except(['destroy']);
 Route::apiResource('transactions', TransactionController::class)->except(['destroy']);
 Route::post('transactions/import', TransactionImportController::class);
+Route::get('/reconciliation/runs', [ReconciliationController::class, 'runs']);
+
+
