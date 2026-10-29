@@ -15,12 +15,15 @@ class Reconciliation extends Model
         'status',
         'confidence',
         'explanation',
+        'evidence',
+        'next_action',
     ];
 
     protected function casts(): array
     {
         return [
-            'confidence' => 'integer',
+             'confidence' => 'integer',
+             'evidence'   => 'array',
         ];
     }
 

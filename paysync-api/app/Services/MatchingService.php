@@ -83,6 +83,7 @@ class MatchingService
 
             usort($results, fn ($a, $b) => $a['invoice_id'] <=> $b['invoice_id']);
             usort($unmatched, fn ($a, $b) => $a['transaction_id'] <=> $b['transaction_id']);
+            $results = $this->addEvidence($results, $invoices, $transactions);
 
             // 5. Record this run. Old runs are kept, never overwritten.
             $matchedCount = count(array_filter(
@@ -105,6 +106,8 @@ class MatchingService
                     'status'         => $r['status'],
                     'confidence'     => $r['confidence'],
                     'explanation'    => $r['explanation'],
+                    'evidence'       => $r['evidence'],
+                    'next_action'    => $r['next_action'],
                 ]);
 
                 // Several payments for one invoice are linked through the pivot table.
@@ -280,6 +283,57 @@ class MatchingService
         return [$results, $unmatched];
     }
 
+     /** Attach evidence and a recommended action to every result. Facts only; never changes a decision. */
+    private function addEvidence(array $results, $invoices, $transactions): array
+    {
+        $invoiceById = $invoices->keyBy('id');
+        $transactionById = $transactions->keyBy('id');
+
+        foreach ($results as $k => $r) {
+            $invoice = $invoiceById[$r['invoice_id']];
+            $invoiceCents = (int) $invoice->amount_cents;
+
+            $total = null;
+            $diff = null;
+            if ($r['transaction_ids']) {
+                $total = 0;
+                foreach ($r['transaction_ids'] as $id) {
+                    $total += (int) $transactionById[$id]->amount_cents;
+                }
+                $diff = $total - $invoiceCents; // negative = short, positive = excess
+            }
+
+            $results[$k]['evidence'] = [
+                'invoice_reference'    => $invoice->reference_id,
+                'currency'             => $invoice->currency,
+                'invoice_amount_cents' => $invoiceCents,
+                'invoice_amount'       => $this->money($invoiceCents),
+                'payment_ids'          => $r['transaction_ids'],
+                'payment_count'        => count($r['transaction_ids']),
+                'payments_total_cents' => $total,
+                'payments_total'       => $total === null ? null : $this->money($total),
+                'difference_cents'     => $diff,
+                'difference'           => $diff === null ? null : ($diff < 0 ? '-' : '') . $this->money(abs($diff)),
+            ];
+            $results[$k]['next_action'] = $this->nextAction($r['status']);
+        }
+
+        return $results;
+    }
+
+    private function nextAction(string $status): string
+    {
+        return match ($status) {
+            'matched'              => 'Approve to mark this invoice as paid.',
+            'split_matched'        => 'Review the installments, then approve to mark the invoice as paid.',
+            'underpaid'            => 'Contact the vendor, or record the remaining balance as outstanding.',
+            'partially_paid'       => 'Record the payments received and follow up on the remaining balance.',
+            'overpaid'             => 'Check for a duplicate or extra payment, and request a refund or credit if needed.',
+            'duplicate_candidates' => 'Choose which invoice each payment belongs to.',
+            'missing_payment'      => 'Follow up on the payment, or import the latest payment records.',
+            default                => 'Review manually.',
+        };
+    }
     /** "REF-7000|USD", or null when there's no usable reference. */
     private function groupKey(?string $reference, string $currency): ?string
     {
