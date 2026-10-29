@@ -4,14 +4,14 @@ namespace App\Services;
 
 use App\Models\Invoice;
 use App\Models\Reconciliation;
+use App\Models\ReconciliationRun;
 use App\Models\Transaction;
 use Illuminate\Support\Facades\DB;
-use App\Models\ReconciliationRun;
 
 class MatchingService
 {
     /**
-     * Returns ['results' => [...per invoice...], 'unmatched_payments' => [...]].
+     * Returns ['run_id' => int, 'results' => [...per invoice...], 'unmatched_payments' => [...]].
      * The engine decides; it never guesses on money. Anything ambiguous is flagged for review.
      * "confidence" is a rule-based score, NOT a statistical probability.
      */
@@ -81,8 +81,7 @@ class MatchingService
                 array_push($unmatched, ...$groupUnmatched);
             }
 
-            // 5. Save the current result per invoice (history comes on Day 5).
-                        usort($results, fn ($a, $b) => $a['invoice_id'] <=> $b['invoice_id']);
+            usort($results, fn ($a, $b) => $a['invoice_id'] <=> $b['invoice_id']);
             usort($unmatched, fn ($a, $b) => $a['transaction_id'] <=> $b['transaction_id']);
 
             // 5. Record this run. Old runs are kept, never overwritten.
@@ -99,7 +98,7 @@ class MatchingService
             ]);
 
             foreach ($results as $r) {
-                Reconciliation::create([
+                $rec = Reconciliation::create([
                     'run_id'         => $run->id,
                     'invoice_id'     => $r['invoice_id'],
                     'transaction_id' => $r['transaction_id'],
@@ -107,6 +106,11 @@ class MatchingService
                     'confidence'     => $r['confidence'],
                     'explanation'    => $r['explanation'],
                 ]);
+
+                // Several payments for one invoice are linked through the pivot table.
+                if (count($r['transaction_ids']) > 1) {
+                    $rec->transactions()->attach($r['transaction_ids']);
+                }
             }
 
             return [
@@ -153,7 +157,7 @@ class MatchingService
             $sameAmountTransactions = $transactionsByAmount[$amount] ?? [];
 
             if (!$sameAmountTransactions) {
-                continue; // no exact payment; pass 2 will look at near matches
+                continue; // no exact payment; pass 2 will look at the leftovers
             }
 
             if (count($sameAmountInvoices) === 1 && count($sameAmountTransactions) === 1) {
@@ -207,6 +211,7 @@ class MatchingService
                 );
             }
         } elseif (count($leftInvoices) === 1 && count($leftTransactions) === 1) {
+            // One invoice, one payment, amounts differ.
             $invoice = $leftInvoices[0];
             $transaction = $leftTransactions[0];
             $diff = (int) $transaction->amount_cents - (int) $invoice->amount_cents;
@@ -224,8 +229,42 @@ class MatchingService
                     $this->money((int) $invoice->amount_cents)
                 )
             );
+        } elseif (count($leftInvoices) === 1 && count($leftTransactions) > 1) {
+            // One invoice, several payments: compare their sum to the invoice.
+            $invoice = $leftInvoices[0];
+            $invoiceCents = (int) $invoice->amount_cents;
+            $paymentCents = array_map(fn ($t) => (int) $t->amount_cents, $leftTransactions);
+            $sum = array_sum($paymentCents);
+            $diff = abs($sum - $invoiceCents);
+            $count = count($leftTransactions);
+            $status = $this->splitStatus($invoiceCents, $paymentCents);
+
+            $explanation = match ($status) {
+                'split_matched' => sprintf(
+                    'Paid in %d installments that add up exactly to the invoice (%s).',
+                    $count, $this->money($sum)
+                ),
+                'partially_paid' => sprintf(
+                    '%d payments total %s, which is %s short of the invoice (%s).',
+                    $count, $this->money($sum), $this->money($diff), $this->money($invoiceCents)
+                ),
+                'overpaid' => sprintf(
+                    '%d payments total %s, which is %s more than the invoice (%s). Review for a duplicate or extra payment.',
+                    $count, $this->money($sum), $this->money($diff), $this->money($invoiceCents)
+                ),
+            };
+
+            $result = $this->result(
+                $invoice,
+                $leftTransactions[0]->id,
+                $status,
+                $status === 'split_matched' ? 90 : 70,
+                $explanation
+            );
+            $result['transaction_ids'] = array_map(fn ($t) => $t->id, $leftTransactions);
+            $results[] = $result;
         } else {
-            // Several invoices and/or payments left: we cannot safely pair them.
+            // Several invoices and several payments left: we cannot safely pair them.
             foreach ($leftInvoices as $invoice) {
                 $results[] = $this->result(
                     $invoice, null, 'duplicate_candidates', 0,
@@ -253,15 +292,28 @@ class MatchingService
         return $reference . '|' . strtoupper(trim($currency));
     }
 
+    /** Status for one invoice paid by several payments (integer cents, exact comparison). */
+    private function splitStatus(int $invoiceCents, array $paymentCents): string
+    {
+        $sum = array_sum($paymentCents);
+
+        if ($sum === $invoiceCents) {
+            return 'split_matched';
+        }
+
+        return $sum < $invoiceCents ? 'partially_paid' : 'overpaid';
+    }
+
     private function result(Invoice $invoice, ?int $transactionId, string $status, int $confidence, string $explanation): array
     {
         return [
-            'invoice_id'     => $invoice->id,
-            'invoice_number' => $invoice->invoice_number,
-            'transaction_id' => $transactionId,
-            'status'         => $status,
-            'confidence'     => $confidence,
-            'explanation'    => $explanation,
+            'invoice_id'      => $invoice->id,
+            'invoice_number'  => $invoice->invoice_number,
+            'transaction_id'  => $transactionId,
+            'transaction_ids' => $transactionId ? [$transactionId] : [],
+            'status'          => $status,
+            'confidence'      => $confidence,
+            'explanation'     => $explanation,
         ];
     }
 
