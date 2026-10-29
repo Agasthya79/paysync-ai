@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Reconciliation;
 use App\Models\ReconciliationRun;
 use App\Services\MatchingService;
+use Illuminate\Http\Request;
 
 class ReconciliationController extends Controller
 {
@@ -40,5 +41,31 @@ class ReconciliationController extends Controller
     public function runs()
     {
         return ReconciliationRun::latest('id')->paginate(15);
+    }
+
+        // A human confirms a clean match. Only matched / split_matched can be approved.
+    public function approve(Reconciliation $reconciliation)
+    {
+        if (!in_array($reconciliation->status, ['matched', 'split_matched'], true)) {
+            return response()->json([
+                'message' => 'Only matched or split_matched results can be approved. This one is "' . $reconciliation->status . '".',
+            ], 422);
+        }
+
+        // Only the latest run's results are current; older rows are history.
+        $latestRunId = ReconciliationRun::max('id');
+        if ($reconciliation->run_id !== $latestRunId) {
+            return response()->json([
+                'message' => 'This result is from an older run. Run reconciliation again and approve the new result.',
+            ], 422);
+        }
+
+        $reconciliation->invoice->update(['status' => 'paid']);
+
+        return response()->json([
+            'message'        => 'Invoice marked as paid.',
+            'invoice_id'     => $reconciliation->invoice_id,
+            'invoice_status' => 'paid',
+        ]);
     }
 }
