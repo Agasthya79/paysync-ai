@@ -51,7 +51,7 @@ cd paysync-api
 composer install
 copy .env.example .env
 php artisan key:generate
-type nul > database\database.sqlite
+New-Item database\database.sqlite -ItemType File
 php artisan migrate
 php artisan db:seed --class=DemoSeeder
 php artisan serve
