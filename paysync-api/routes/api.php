@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ReconciliationController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\TransactionImportController;
+use App\Http\Controllers\Api\PaypalController;
 
 Route::get('/health', function () {
     return response()->json([
@@ -34,3 +35,5 @@ Route::post('transactions/import', TransactionImportController::class);
 Route::get('/reconciliation/runs', [ReconciliationController::class, 'runs']);
 Route::post('/reconciliation/{reconciliation}/approve', [ReconciliationController::class, 'approve']);
 
+Route::post('invoices/{invoice}/paypal/order', [PaypalController::class, 'createOrder']);
+Route::post('paypal/orders/{orderId}/capture', [PaypalController::class, 'capture']);
