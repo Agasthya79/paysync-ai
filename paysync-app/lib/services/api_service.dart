@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/invoice.dart';
 import '../models/transaction.dart';
+import '../models/reconciliation.dart';
 
 class ApiService {
   // Chrome runs on the same machine as the API. For an Android emulator use 10.0.2.2 instead.
@@ -65,5 +66,25 @@ class ApiService {
 
   Future<Map<String, dynamic>> runReconciliation() async {
     return await _post('/reconciliation/run') as Map<String, dynamic>;
+  }
+
+    Future<List<Reconciliation>> getReconciliations() async {
+    final body = await _get('/reconciliation');
+    return (body as List)
+        .map((j) => Reconciliation.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  // Returns the server's message. Throws with the server's reason on a 422.
+  Future<String> approve(int reconciliationId) async {
+    final res = await http
+        .post(Uri.parse('$baseUrl/reconciliation/$reconciliationId/approve'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      throw Exception(body['message'] ?? 'Approve failed (HTTP ${res.statusCode})');
+    }
+    return body['message'] as String;
   }
 }

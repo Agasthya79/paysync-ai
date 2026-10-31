@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/invoices_screen.dart';
+import 'screens/results_screen.dart';
 import 'screens/transactions_screen.dart';
 
 void main() => runApp(const PaySyncApp());
@@ -28,7 +29,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  static const _titles = ['Dashboard', 'Invoices', 'Transactions'];
+  static const _titles = ['Dashboard', 'Invoices', 'Transactions', 'Results'];
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +38,7 @@ class _HomeShellState extends State<HomeShell> {
       const DashboardScreen(),
       const InvoicesScreen(),
       const TransactionsScreen(),
+      const ResultsScreen(),
     ];
 
     return Scaffold(
@@ -49,6 +51,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Invoices'),
           NavigationDestination(icon: Icon(Icons.payments), label: 'Transactions'),
+          NavigationDestination(icon: Icon(Icons.fact_check), label: 'Results'),
         ],
       ),
     );
