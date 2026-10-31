@@ -26,6 +26,38 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     });
   }
 
+  Future<void> _pay(Invoice inv) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Pay ${inv.invoiceNumber}'),
+        content: Text(
+            'Pay ${inv.amount} ${inv.currency} with PayPal?\n\n'
+            'Demo runs in mock mode: the server simulates PayPal, and verifies '
+            'the amount and currency against the invoice.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Pay with PayPal')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    try {
+      final api = ApiService();
+      final order = await api.createPaypalOrder(inv.id);
+      final msg = await api.capturePaypalOrder(order['order_id'] as String);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$msg Run reconciliation to match it.')));
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Invoice>>(
@@ -53,11 +85,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
               final inv = invoices[i];
+              final payable = inv.status != 'paid' && inv.referenceId != null;
               return ListTile(
                 title: Text(inv.invoiceNumber),
                 subtitle: Text(inv.referenceId != null
                     ? 'Ref: ${inv.referenceId}'
                     : inv.vendorName),
+                onTap: payable ? () => _pay(inv) : null,
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,

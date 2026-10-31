@@ -87,4 +87,26 @@ class ApiService {
     }
     return body['message'] as String;
   }
+
+    Future<Map<String, dynamic>> createPaypalOrder(int invoiceId) async {
+    final res = await http
+        .post(Uri.parse('$baseUrl/invoices/$invoiceId/paypal/order'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 201) {
+      throw Exception(body['message'] ?? 'Could not create order');
+    }
+    return body as Map<String, dynamic>;
+  }
+
+  Future<String> capturePaypalOrder(String orderId) async {
+    final res = await http
+        .post(Uri.parse('$baseUrl/paypal/orders/$orderId/capture'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      throw Exception(body['message'] ?? 'Capture failed');
+    }
+    return body['message'] as String;
+  }
 }
