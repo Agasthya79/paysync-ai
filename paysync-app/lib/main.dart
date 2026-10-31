@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'services/api_service.dart';
-import 'models/invoice.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/invoices_screen.dart';
+import 'screens/transactions_screen.dart';
 
 void main() => runApp(const PaySyncApp());
 
@@ -12,37 +13,43 @@ class PaySyncApp extends StatelessWidget {
     return MaterialApp(
       title: 'PaySync AI',
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
-      home: const InvoiceTestScreen(),
+      home: const HomeShell(),
     );
   }
 }
 
-class InvoiceTestScreen extends StatelessWidget {
-  const InvoiceTestScreen({super.key});
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
+
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
+  int _index = 0;
+
+  static const _titles = ['Dashboard', 'Invoices', 'Transactions'];
 
   @override
   Widget build(BuildContext context) {
+    // Screens are rebuilt on tab change, so each tab loads fresh data.
+    final pages = <Widget>[
+      const DashboardScreen(),
+      const InvoicesScreen(),
+      const TransactionsScreen(),
+    ];
+
     return Scaffold(
-      appBar: AppBar(title: const Text('PaySync AI')),
-      body: FutureBuilder<List<Invoice>>(
-        future: ApiService().getInvoices(),
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return Center(child: Text('Error: ${snap.error}'));
-          }
-          final invoices = snap.data!;
-          return ListView.builder(
-            itemCount: invoices.length,
-            itemBuilder: (_, i) => ListTile(
-              title: Text(invoices[i].invoiceNumber),
-              subtitle: Text(invoices[i].vendorName),
-              trailing: Text('${invoices[i].amount} ${invoices[i].currency}'),
-            ),
-          );
-        },
+      appBar: AppBar(title: Text('PaySync AI · ${_titles[_index]}')),
+      body: pages[_index],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Invoices'),
+          NavigationDestination(icon: Icon(Icons.payments), label: 'Transactions'),
+        ],
       ),
     );
   }
