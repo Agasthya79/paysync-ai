@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Reconciliation;
 use App\Models\ReconciliationRun;
+use App\Services\GeminiService;
 use App\Services\MatchingService;
-use Illuminate\Http\Request;
 
 class ReconciliationController extends Controller
 {
@@ -43,7 +43,7 @@ class ReconciliationController extends Controller
         return ReconciliationRun::latest('id')->paginate(15);
     }
 
-        // A human confirms a clean match. Only matched / split_matched can be approved.
+    // A human confirms a clean match. Only matched / split_matched can be approved.
     public function approve(Reconciliation $reconciliation)
     {
         if (!in_array($reconciliation->status, ['matched', 'split_matched'], true)) {
@@ -66,6 +66,45 @@ class ReconciliationController extends Controller
             'message'        => 'Invoice marked as paid.',
             'invoice_id'     => $reconciliation->invoice_id,
             'invoice_status' => 'paid',
+        ]);
+    }
+
+    // AI explains the engine's decision. It only receives validated facts and never changes the result.
+    public function explain(Reconciliation $reconciliation, GeminiService $gemini)
+    {
+        if ($reconciliation->ai_explanation) {
+            return response()->json([
+                'explanation' => $reconciliation->ai_explanation,
+                'source'      => 'ai',
+                'cached'      => true,
+            ]);
+        }
+
+        $invoice = $reconciliation->invoice;
+
+        $text = $gemini->explain([
+            'invoice_number'     => $invoice->invoice_number,
+            'currency'           => $invoice->currency,
+            'status'             => $reconciliation->status,
+            'engine_explanation' => $reconciliation->explanation,
+            'evidence'           => $reconciliation->evidence,
+            'recommended_action' => $reconciliation->next_action,
+        ]);
+
+        if ($text === null) {
+            return response()->json([
+                'explanation' => $reconciliation->explanation,
+                'source'      => 'template',
+                'cached'      => false,
+            ]);
+        }
+
+        $reconciliation->update(['ai_explanation' => $text]);
+
+        return response()->json([
+            'explanation' => $text,
+            'source'      => 'ai',
+            'cached'      => false,
         ]);
     }
 }

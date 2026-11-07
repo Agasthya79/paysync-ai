@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/invoice.dart';
-import '../models/transaction.dart';
 import '../models/reconciliation.dart';
+import '../models/transaction.dart';
 
 class ApiService {
   // Chrome runs on the same machine as the API. For an Android emulator use 10.0.2.2 instead.
@@ -68,7 +68,7 @@ class ApiService {
     return await _post('/reconciliation/run') as Map<String, dynamic>;
   }
 
-    Future<List<Reconciliation>> getReconciliations() async {
+  Future<List<Reconciliation>> getReconciliations() async {
     final body = await _get('/reconciliation');
     return (body as List)
         .map((j) => Reconciliation.fromJson(j as Map<String, dynamic>))
@@ -88,10 +88,23 @@ class ApiService {
     return body['message'] as String;
   }
 
-    Future<Map<String, dynamic>> createPaypalOrder(int invoiceId) async {
+  // AI summary of the engine's decision. Falls back to the template text on the server.
+  Future<Map<String, dynamic>> explain(int reconciliationId) async {
+    final res = await http
+        .post(Uri.parse('$baseUrl/reconciliation/$reconciliationId/explain'), headers: _headers)
+        .timeout(const Duration(seconds: 40));
+
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      throw Exception(body['message'] ?? 'Explain failed (HTTP ${res.statusCode})');
+    }
+    return body as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createPaypalOrder(int invoiceId) async {
     final res = await http
         .post(Uri.parse('$baseUrl/invoices/$invoiceId/paypal/order'), headers: _headers)
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 30));
     final body = jsonDecode(res.body);
     if (res.statusCode != 201) {
       throw Exception(body['message'] ?? 'Could not create order');
@@ -102,7 +115,7 @@ class ApiService {
   Future<String> capturePaypalOrder(String orderId) async {
     final res = await http
         .post(Uri.parse('$baseUrl/paypal/orders/$orderId/capture'), headers: _headers)
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 30));
     final body = jsonDecode(res.body);
     if (res.statusCode != 200) {
       throw Exception(body['message'] ?? 'Capture failed');

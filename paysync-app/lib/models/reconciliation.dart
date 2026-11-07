@@ -7,6 +7,7 @@ class Reconciliation {
   final int confidence;
   final String explanation;
   final String? nextAction;
+  final String? aiExplanation;
   final Map<String, dynamic>? evidence;
   final List<String> paymentIds; // external IDs of the linked payments
 
@@ -19,6 +20,7 @@ class Reconciliation {
     required this.confidence,
     required this.explanation,
     this.nextAction,
+    this.aiExplanation,
     this.evidence,
     required this.paymentIds,
   });
@@ -51,6 +53,7 @@ class Reconciliation {
       confidence: (json['confidence'] as num).toInt(),
       explanation: json['explanation'].toString(),
       nextAction: json['next_action']?.toString(),
+      aiExplanation: json['ai_explanation']?.toString(),
       evidence: json['evidence'] as Map<String, dynamic>?,
       paymentIds: ids,
     );

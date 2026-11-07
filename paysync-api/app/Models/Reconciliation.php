@@ -17,13 +17,14 @@ class Reconciliation extends Model
         'explanation',
         'evidence',
         'next_action',
+        'ai_explanation',
     ];
 
     protected function casts(): array
     {
         return [
-             'confidence' => 'integer',
-             'evidence'   => 'array',
+            'confidence' => 'integer',
+            'evidence'   => 'array',
         ];
     }
 

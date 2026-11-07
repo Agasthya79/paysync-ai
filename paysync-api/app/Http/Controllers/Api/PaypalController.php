@@ -7,7 +7,9 @@ use App\Models\Invoice;
 use App\Models\PaypalOrder;
 use App\Models\Transaction;
 use App\Services\PayPalService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class PaypalController extends Controller
 {
@@ -20,8 +22,12 @@ class PaypalController extends Controller
             return response()->json(['message' => 'The invoice needs a reference ID so the payment can be matched.'], 422);
         }
 
-        // The amount always comes from the database, never from the client.
-        $order = $paypal->createOrder((int) $invoice->amount_cents, $invoice->currency, $invoice->invoice_number);
+        try {
+            // The amount always comes from the database, never from the client.
+            $order = $paypal->createOrder((int) $invoice->amount_cents, $invoice->currency, $invoice->invoice_number);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 502);
+        }
 
         $record = PaypalOrder::create([
             'order_id'     => $order['order_id'],
@@ -47,13 +53,18 @@ class PaypalController extends Controller
             return response()->json(['message' => 'This order was already processed.'], 409);
         }
 
-        $result = $paypal->capture($order->order_id, $order->amount_cents, $order->currency);
+        try {
+            $result = $paypal->capture($order->order_id, $order->amount_cents, $order->currency);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 502);
+        }
 
         // Verify the response against our own records before trusting it.
         if (
             $result['status'] !== 'COMPLETED'
             || (int) $result['amount_cents'] !== $order->amount_cents
             || $result['currency'] !== $order->currency
+            || $result['capture_id'] === ''
         ) {
             $order->update(['status' => 'failed_verification']);
 
@@ -83,5 +94,28 @@ class PaypalController extends Controller
             'transaction_id' => $transaction->id,
             'external_id'    => $transaction->external_id,
         ]);
+    }
+
+    // PayPal redirects the buyer here after approval. The capture happens server-side.
+    public function paypalReturn(Request $request, PayPalService $paypal)
+    {
+        $res = $this->capture((string) $request->query('token'), $paypal);
+        $ok = $res->getStatusCode() === 200;
+        $msg = e($res->getData(true)['message'] ?? 'Done');
+
+        return response(
+            '<html><body style="font-family:sans-serif;text-align:center;margin-top:15vh">'
+            . '<h2>' . ($ok ? 'Payment received' : 'Payment not completed') . '</h2>'
+            . '<p>' . $msg . '</p><p>You can close this tab and return to PaySync AI.</p></body></html>',
+            $ok ? 200 : 422
+        );
+    }
+
+    public function paypalCancel()
+    {
+        return response(
+            '<html><body style="font-family:sans-serif;text-align:center;margin-top:15vh">'
+            . '<h2>Payment cancelled</h2><p>No money was taken. You can close this tab.</p></body></html>'
+        );
     }
 }
